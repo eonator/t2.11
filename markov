@@ -1,0 +1,407 @@
+/*Auteur: Alex Antoine Bussing Hudon p1236513
+
+Ma coéquipière était Alina Weinberger, mais elle a eu un problème avec son visa
+et s'est fait virer du programme lundi 9 décemebre j'ai donc fait le travail
+seul et c'est pour ça que je n'ai pas de coéquipier
+
+ */
+
+
+// Utilitaires pour manipuler des fichiers
+var fs = require("fs");
+
+var readFile = function (path) {
+    return fs.readFileSync(path).toString();
+};
+
+var writeFile = function (path, texte) {
+    fs.writeFileSync(path, texte);
+};
+
+// on pourrait enelever les deux corpus de tests pour que ca run plus vite
+var corpus = readFile('corpus/wikipedia');
+var corpusTrivial = readFile("corpus/trivial");
+var corpusExemple = readFile("corpus/exemple");
+
+
+
+// TODO : compléter cette fonction
+
+var creerModele = function(texte) {
+
+
+    //Tableau contenant tous les mots du texte dans corpus
+    var motsDuTexte = texte.split("\n").join("\r").split("\r");
+    var motsDuTexte2 = [];
+
+
+    // de maniere a ce qu'on aille des '' en chaque debut de phrase
+    for(var i =0; i <motsDuTexte.length; i++){
+        var x = motsDuTexte[i];
+        x = x.split(" ");
+        x.unshift('');
+
+        for(var j = 0; j < x .length; j++){
+            var car = x[j];
+            motsDuTexte2.push(car);
+        }
+    }
+
+
+    // pour chaque mot, les possibiltes de mots qui suivent
+    var possiblitesTousMots = {};
+
+
+
+    //Tous les mots possibles, une fois**
+    var tabDesDifferentsMotsPossibles = [];
+
+
+    function enregistrements () {
+        var tabDesMots = motsDuTexte2; //tableau qui contient le mots du texte
+
+        // pour chaque mot on creer un enregistrement avec ses prochains mots
+        for (var i = 0; i < tabDesMots.length - 1; i++) {
+            var mot = tabDesMots[i];
+            var motSuivant = tabDesMots[i + 1]; //prochain mot
+
+            // si le mot est pas encore enregistre on creer un nouveauenregistrement pour
+            if (!possiblitesTousMots[mot]) {
+                possiblitesTousMots[mot] = [];
+                tabDesDifferentsMotsPossibles.push(mot);
+            }
+            possiblitesTousMots[mot].push(motSuivant);
+        }
+    }
+
+    enregistrements();
+
+
+
+    // fait la probabilite de chaque prochain mot par rapport au mot precendent
+    // avec l'ensemble de prochains mots
+    function probabilite(tab, motQuonChercheLaProb, longueurTab){
+
+        // nombre de fois que le prochains mot se retrouve apres le mot
+        // en question
+        var nbreDefois = 0;
+
+        for(var i = 0; i < tab.length; i++){
+            var mot = tab[i];
+
+            if(mot === motQuonChercheLaProb){
+                nbreDefois += 1;
+            }
+        }
+
+        // nombre de fois par rapport a l'ensemble des prochains mots
+        return nbreDefois/longueurTab;
+    }
+
+
+    function tableauMotEtProbMotsSuivants (tab){
+
+        var motsDejaUtilises = [];
+        var prob = [];
+
+        for(var i = 0; i < tab.length; i++){
+            var mot = tab[i];
+
+            if(!motsDejaUtilises.includes(mot)) {
+                prob.push(probabilite(tab, mot, tab.length));
+                motsDejaUtilises.push(mot);
+            }
+        }
+
+        var tabMotsSuivants = [];
+
+        for(var j = 0; j < motsDejaUtilises.length; j++){
+            var mot2 = motsDejaUtilises[j];
+            var prob2 = prob[j];
+            var objetMotEtProb = {"mot": mot2,"prob": prob2};
+            tabMotsSuivants.push(objetMotEtProb);
+        }
+
+        return tabMotsSuivants;
+    }
+
+
+    function creerChaqueEnregiPossible (){
+
+        var tabFinalProchainsMots = [];
+
+        for(var i = 0; i < tabDesDifferentsMotsPossibles.length; i++){
+            var mot = tabDesDifferentsMotsPossibles[i]; // prend chaque mot de tous les mots possibles
+            var motsPossibles = possiblitesTousMots[mot]; // prend les possibilites du prochain mot de chaque mot
+
+            tabFinalProchainsMots.push(tableauMotEtProbMotsSuivants(motsPossibles));
+
+        }
+
+        return tabFinalProchainsMots;
+    }
+
+
+    var modele = {
+        dictionnaire: tabDesDifferentsMotsPossibles,
+        prochainsMots: creerChaqueEnregiPossible()
+    };
+
+
+    return modele;
+};
+
+
+
+// utile pour quand on veut faire des console.log
+// juste plus court.. et insert le modele dans une variable
+var modele = creerModele(corpus);
+
+// pour faire les tests plus facilement on utilise modeleTrivial et
+// modeleExemple
+var modeleTrivial = creerModele(corpusTrivial);
+var modeleExemple = creerModele(corpusExemple);
+
+// TODO : compléter cette fonction
+
+// fonction qui prend un terme au hasard dans un tableau
+function utiliserRandom (tableau){
+    return tableau[Math.floor(Math.random()*tableau.length)];
+}
+
+
+var genererProchainMot = function(modele, motActuel) {
+
+    var index = modele.dictionnaire.indexOf(motActuel);
+    var prochainsMotsPossibles = modele.prochainsMots[index];
+
+    // si il n'a a pas de prochain mot possible on recommence avec ''
+    if(!prochainsMotsPossibles)
+        prochainsMotsPossibles = modele.prochainsMots[0];
+
+    // function qui trouve un tableau avec les probabilites de chaque procahin
+    // mot de sorte a pouvoir utiliser la function utiliserRandom
+    // honnetement je ne vois pas comment on aurait pu faire autrement en
+    // utilisant que les valeurs de l'enregistrement...
+    function trouverTabProbs (prochains) {
+
+        var tabProbs = [];
+        for (var i = 0; i < prochains.length; i++) {
+            var element = prochains[i];
+
+            // on peut ajuster on pourrait ajuster la valeur fixe en rapport
+            // aux nombres de mots aussi
+            var prob = Math.floor((element.prob)*10000);
+
+
+            for(var j = 0; j < prob; j++){
+                tabProbs.push(element.mot);
+            }
+        }
+
+        return tabProbs;
+    }
+
+    // trouve le mot random dans le tableau de choix possibles base sur les
+    // probabilites de chaque prochain mot
+    var prochainMot = utiliserRandom(trouverTabProbs(prochainsMotsPossibles));
+    return prochainMot;
+};
+
+//console.log(genererProchainMot(modele, 'il'));
+// TODO : compléter cette fonction
+
+// function qui que les mots >= 7 de longueur peuvent etre
+// les 3 15%
+function motProbChange (mot){
+    var tabDesProb = [
+        "<a href=" + '\"' + "/article/" + mot + '\">' + mot + "</a>",
+        "<a href=" + '\"' + "/article/" + mot + '\">' + mot + "</a>",
+        "<a href=" + '\"' + "/article/" + mot + '\">' + mot + "</a>",
+        mot, mot, mot, mot, mot, mot, mot, mot, mot, mot, mot,
+        '<strong>' + mot + '</strong>',
+        '<strong>' + mot + '</strong>',
+        '<strong>'+ mot + '</strong>',
+        '<em>' + mot + '</em>',
+        '<em>' + mot +'</em>',
+        '<em>' + mot +'</em>'];
+
+    return utiliserRandom(tabDesProb);
+}
+
+
+//function qui genere une phrase avec le modele donne
+var genererPhrase = function(modele, maxNbMots) {
+
+    var texte = '';
+    var motCourant;
+    //var tabDuTexte = [];
+    // juste pour voir si on le bon nombre de mots a chaque phrase
+
+    for(var i = 0; i < maxNbMots; i++){
+
+        // on commence par '' pour s'assurer de commencer par une majuscule
+        if(i === 0)
+            motCourant = '';
+
+        // appelle a la fonction pour trouver le mot qui suit
+        var prochainMot = genererProchainMot(modele, motCourant);
+
+        // function qui fait juste regarder si le mot contient que des lettres
+        // pour l'application des mots >= 7 de longueur
+        function regarderContenuDuMot (mot) {
+
+            var tabCheck = [];
+
+            for(var j = 0; j < mot.length; j++){
+                var caractere = mot.charAt(j);
+                if(caractere >= 'a' && caractere <= 'z' ||
+                    caractere >= 'A' && caractere <= 'Z')
+                    tabCheck.push(caractere);
+            }
+
+            if(tabCheck.length === mot.length) {
+                return true;
+            }else {
+                return false;
+            }
+        }
+
+        // si il n'y a pas de continuation possible on break de la boucle
+        if(!prochainMot)
+            break;
+
+        // Si le mot finit par un point le prog bug parce qu'il croit que c'est
+        // une fin de phrase donc on fait juste dire que c'est '' le procahin
+        // mot comme ca on s'assure que le prochain mot commence par une maj
+        if(prochainMot.charAt(prochainMot.length - 1) == '.'){
+            motCourant = '';
+            texte += prochainMot + " ";
+            //tabDuTexte.push(prochainMot);
+
+            // pour les mot de 7 car et plus
+        }else if(prochainMot.length >= 7 &&
+            regarderContenuDuMot(prochainMot) === true){
+
+            motCourant = prochainMot;
+            texte += motProbChange(prochainMot) + " ";
+            //tabDuTexte.push(prochainMot);
+        }else if(prochainMot == ''){
+            // rajoute pas despace sinon va fait comme deux espaces
+            motCourant = prochainMot;
+            texte += prochainMot;
+            //tabDuTexte.push(prochainMot);
+        }else{ // pour le reste on fait juste rajouter le mot et un espace
+            motCourant = prochainMot;
+            texte += prochainMot + " ";
+            //tabDuTexte.push(prochainMot);
+        }
+
+    }
+
+    return texte;
+};
+
+/*
+for(var i = 0; i < 50; i++) {
+    console.log(genererPhrase(modele, 10));
+}
+
+ */
+
+
+// TODO : compléter cette fonction
+function tabToHTMLPrint (tab){
+    // similaire a tabToHTML dans index.js on rajoute une balise p pour les
+    // paragraphes
+    return tab.reduce( (accumulateur, x) => {
+        return accumulateur + "<p>" + x + "</p> \n";
+    }, "" )
+}
+
+//console.log(tabToHTMLPrint(['allo mon nom cest', 'marc de lafontaine']));
+
+
+var genererParagraphes = function(modele, nbParagraphes, maxNbPhrases, maxNbMots) {
+
+    var texte = ''; // texte au complet
+    var texteEnHTML = [];
+
+    function trouverValeurRandomEntreEntiers(max) {
+        return Math.floor(Math.random() * Math.floor(max));
+    }
+
+    for(var i = 0; i < nbParagraphes; i++){
+
+        var texte2 = ''; // texte de chaque paragraphe
+
+        // valeur random entre 1 et maxNbPhrases
+        var nbPhraseDuParagraphes =
+            trouverValeurRandomEntreEntiers(maxNbPhrases) + 1;
+
+        for(var j = 0; j < nbPhraseDuParagraphes; j++){
+            var phrase = genererPhrase(modele, maxNbMots);
+            texte2 += phrase + '\n'; // on peut aussi rajouter \n ici et enlever
+                              // dans tabToHTMLPrint, au choix
+        }
+
+        texteEnHTML.push(texte2);
+    }
+
+    texteEnHTML.push(texte);
+    texteEnHTML = tabToHTMLPrint(texteEnHTML);
+
+    return texteEnHTML;
+};
+
+//console.log(genererParagraphes(modele, 3, 3, 10));
+
+
+
+
+var tests = function() {
+    // TODO : Écrivez des tests ici
+
+    /* Les tests seront lancés automatiquement si vous appelez ce
+    fichier avec :
+
+       node markov.js
+
+     */
+
+    console.assert(JSON.stringify(modeleTrivial.dictionnaire) ===
+        JSON.stringify([ '', 'A', 'B', 'C.', 'A.', 'C' ]));
+
+    console.assert(JSON.stringify(modeleTrivial.prochainsMots) ===
+        JSON.stringify([
+            [
+                { mot: 'A', prob: 0.6666666666666666 },
+                { mot: 'C', prob: 0.3333333333333333 }
+            ],
+            [ { mot: 'B', prob: 1 } ],
+            [
+                { mot: 'C.', prob: 0.3333333333333333 },
+                { mot: 'A.', prob: 0.6666666666666666 }
+            ],
+            [ { mot: '', prob: 1 } ],
+            [ { mot: '', prob: 1 } ],
+            [ { mot: 'B', prob: 1 } ]
+        ]));
+
+
+
+    // Utilisez console.assert(a == b); pour faire des tests unitaires
+    console.log('TODO : exécuter des tests');
+};
+
+
+
+if (require.main === module) {
+    // Si on se trouve ici, alors le fichier est exécuté via : nodejs markov.js
+    tests(); // On lance les tests
+} else {
+    /* Sinon, le fichier est inclus depuis index.js
+       On exporte les fonctions importantes pour le serveur web */
+    exports.creerModele = creerModele;
+    exports.genererParagraphes = genererParagraphes;
+}
